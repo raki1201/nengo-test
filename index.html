@@ -297,6 +297,7 @@
     }
     .wrong-review-box h3 { color: #5c3d2e; font-size: 0.9rem; margin-bottom: 10px; }
     .no-wrong-msg { font-size: 0.8rem; color: #b0a090; margin-bottom: 8px; }
+    .queue-status { font-size: 0.8rem; color: #a0522d; margin-top: 6px; background: #fff8f0; border-radius: 6px; padding: 6px 10px; }
     .wrong-mode-btns { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
     .wrong-mode-btns .mode-btn {
       background: #fff3e0;
@@ -345,6 +346,7 @@
         <option value="30">30問</option>
         <option value="50">50問</option>
       </select>
+      <div class="queue-status" id="queue-status" style="display:none"></div>
     </div>
     <label class="shuffle-toggle">
       <input type="checkbox" id="shuffle-check" checked>
@@ -567,6 +569,52 @@ let yearRevealed = false;
 let isWrongReview = false;
 
 const STORAGE_KEY = 'nengo_wrong_ids';
+const QUEUE_KEY   = 'nengo_queue';
+const QUEUE_RANGE_KEY = 'nengo_queue_range';
+
+function getQueue(rangeKey) {
+  try {
+    const savedRange = localStorage.getItem(QUEUE_RANGE_KEY);
+    const saved = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    if (savedRange !== rangeKey || saved.length === 0) return null;
+    return saved;
+  } catch { return null; }
+}
+
+function saveQueue(rangeKey, ids) {
+  localStorage.setItem(QUEUE_RANGE_KEY, rangeKey);
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(ids));
+}
+
+function pullFromQueue(rangeKey, pool, n) {
+  let queue = getQueue(rangeKey);
+  if (!queue) {
+    queue = shuffle(pool.map(q => q.id));
+    saveQueue(rangeKey, queue);
+  }
+  const pulled = queue.splice(0, n);
+  if (queue.length === 0) {
+    localStorage.removeItem(QUEUE_KEY);
+  } else {
+    saveQueue(rangeKey, queue);
+  }
+  return pulled;
+}
+
+function updateQueueStatus() {
+  const countVal = document.getElementById('count-select').value;
+  const rangeVal = document.getElementById('range-select').value;
+  const statusEl = document.getElementById('queue-status');
+  if (countVal === 'all') { statusEl.style.display = 'none'; return; }
+  const queue = getQueue(rangeVal);
+  const remaining = queue ? queue.length : null;
+  if (remaining === null) {
+    statusEl.style.display = 'none';
+  } else {
+    statusEl.style.display = 'block';
+    statusEl.textContent = `次のセッション開始まで残り ${remaining} 問（全問出たらリセット）`;
+  }
+}
 
 function getWrongIds() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -634,9 +682,17 @@ function startMode(m) {
     filtered = allQuestions.filter(q => q.id >= start && q.id <= end);
   }
   const countVal = document.getElementById('count-select').value;
-  let pool = doShuffle ? shuffle(filtered) : [...filtered];
-  if (countVal !== 'all') pool = pool.slice(0, parseInt(countVal));
-  questions = pool;
+  let questions_pool;
+  if (countVal === 'all') {
+    questions_pool = doShuffle ? shuffle(filtered) : [...filtered];
+  } else {
+    const n = parseInt(countVal);
+    const pulledIds = pullFromQueue(range, filtered, n);
+    const idMap = Object.fromEntries(allQuestions.map(q => [q.id, q]));
+    questions_pool = pulledIds.map(id => idMap[id]);
+    updateQueueStatus();
+  }
+  questions = questions_pool;
   currentIndex = 0;
   score = 0;
   wrongAnswers = [];
@@ -983,6 +1039,9 @@ addTap('back-btn',    goBack);
 addTap('next-btn',    goNext);
 
 updateWrongBtn();
+updateQueueStatus();
+document.getElementById('count-select').addEventListener('change', updateQueueStatus);
+document.getElementById('range-select').addEventListener('change', updateQueueStatus);
 
 addTap('submit-btn', checkInputAnswer);
 
