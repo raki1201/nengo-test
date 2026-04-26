@@ -336,6 +336,16 @@
         <option value="76-100">第4部（76〜100問）</option>
       </select>
     </div>
+    <div class="range-select">
+      <label>出題数</label>
+      <select id="count-select">
+        <option value="all">全部</option>
+        <option value="10">10問</option>
+        <option value="20">20問</option>
+        <option value="30">30問</option>
+        <option value="50">50問</option>
+      </select>
+    </div>
     <label class="shuffle-toggle">
       <input type="checkbox" id="shuffle-check" checked>
       シャッフルして出題
@@ -623,7 +633,10 @@ function startMode(m) {
     const [start, end] = range.split('-').map(Number);
     filtered = allQuestions.filter(q => q.id >= start && q.id <= end);
   }
-  questions = doShuffle ? shuffle(filtered) : [...filtered];
+  const countVal = document.getElementById('count-select').value;
+  let pool = doShuffle ? shuffle(filtered) : [...filtered];
+  if (countVal !== 'all') pool = pool.slice(0, parseInt(countVal));
+  questions = pool;
   currentIndex = 0;
   score = 0;
   wrongAnswers = [];
